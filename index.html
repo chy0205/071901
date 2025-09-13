@@ -112,225 +112,279 @@
       }
     </style>
   </head>
-  <body>
-    <h1>1</h1>
-    <h1>2</h1>
-    <h1>2</h1>
-    <h1>2</h1>
-
-    <div class="slot-machine-wrapper">
-      <div id="mainReel" class="reel-box">--</div>
+<body>
+    <!-- 彈出視窗區塊 -->
+    <div id="modalContainer" class="modal">
+        <div class="modal-content">
+            <h2 class="text-2xl font-bold">請選擇要使用的名單：</h2>
+            <div class="modal-button-group">
+                <button id="selectList1Btn" class="modal-button">組別</button>
+                <button id="selectList2Btn" class="modal-button">個人</button>
+            </div>
+        </div>
     </div>
-    <br />
-    <br />
-    <br />
-    <br />
-    <br />
-    <br />
 
-    <audio id="spinSound" src="002.mp3" preload="auto"></audio>
-    <audio id="finishSound" src="002.mp3" preload="auto"></audio>
+    <!-- 主容器 -->
+    <div id="pickerContainer" class="container">
+        <!-- 廟宇框架 -->
+        <div class="temple-frame">
+            <div class="logo-circle">
+                <h1 class="title">抽獎</h1>
+            </div>
+            
+            <div class="side-banner left">
+                <p>加入團隊以求兼善</p>
+            </div>
+            <div class="side-banner right">
+                <p>邊學邊做不唯自尊</p>
+            </div>
 
-    <button id="drawButton" onclick="startDraw()">開始抽選</button>
-    <button id="resetHistoryButton" onclick="resetHistory()">清除紀錄</button>
-    <button id="restartButton" onclick="restartAll()">🔄 重新開始</button>
+            <!-- 核心功能區塊 -->
+            <div class="main-content">
+                <div id="resultBox" class="result-box">--</div>
+                <div class="button-group">
+                    <button id="pickBtn" class="button" disabled>開始抽獎</button>
+                    <button id="clearHistoryBtn" class="button">清除紀錄</button>
+                </div>
+                
+                <div id="message" class="message"></div>
 
-    <div id="result"></div>
-    <div id="history"><strong>🎯 抽選紀錄：</strong></div>
+                <div class="history-container">
+                    <div class="flex justify-between items-center mb-2">
+                        <h2 class="history-title">抽獎紀錄</h2>
+                        <span id="historyCount" class="text-sm text-gray-500">已抽出：0人</span>
+                    </div>
+                    <ul id="historyList" class="history-list">
+                        <!-- 記錄將在這裡顯示 -->
+                    </ul>
+                </div>
+            </div>
+            
+        </div>
+        
+        <!-- 模擬拉桿 -->
+        <div class="lever-container">
+            <div class="lever-handle"></div>
+            <div class="lever-ball"></div>
+        </div>
+
+    </div>
 
     <script>
-      // 從 Google 試算表載入的資料
-      let areaListA = [];
-      let areaNames = [];
-      let areaMap = {};
-      let drawnMap = {};
-      let lastDrawnResult = null;
+        // 拖曳功能
+        const pickerContainer = document.getElementById('pickerContainer');
+        let isDragging = false;
+        let offset = { x: 0, y: 0 };
 
-      const spinSound = document.getElementById('spinSound');
-      const finishSound = document.getElementById('finishSound');
-
-      // =================================== 載入資料與洗牌函式 ===================================
-
-      /**
-       * 洗牌函式（Fisher-Yates shuffle）。
-       * @param {Array} array - 要打亂的陣列。
-       */
-      function shuffleArray(array) {
-        for (let i = array.length - 1; i > 0; i--) {
-          const j = Math.floor(Math.random() * (i + 1));
-          [array[i], array[j]] = [array[j], array[i]];
-        }
-      }
-
-      /**
-       * 從 Google 試算表的 Apps Script 讀取抽獎資料並打亂名單。
-       */
-      async function loadDataFromGoogleSheet() {
-        const url = 'https://script.google.com/macros/s/AKfycbwrbfpDXGDH7x70OdXkNNZ05ux3eJocrXVDouYbVQBakHa8uVnNwY42KJmG2cV257CFFg/exec';
+        pickerContainer.addEventListener('mousedown', (e) => {
+            isDragging = true;
+            offset.x = e.clientX - pickerContainer.getBoundingClientRect().left;
+            offset.y = e.clientY - pickerContainer.getBoundingClientRect().top;
+            pickerContainer.style.cursor = 'grabbing';
+        });
         
-        try {
-          const response = await fetch(url);
-          if (!response.ok) {
-            throw new Error(`HTTP 錯誤! 狀態: ${response.status}`);
-          }
-          const data = await response.json();
-          
-          areaListA = data.areaListA;
-          areaNames = data.areaNames;
-          areaMap = data.areaMap;
-          
-          shuffleArray(areaNames);
-
-          for (const area in areaMap) {
-            if (areaMap.hasOwnProperty(area)) {
-              shuffleArray(areaMap[area]);
-            }
-          }
-          console.log('資料已成功從 Google 試算表載入並打亂。');
-        } catch (error) {
-          console.error('載入資料失敗:', error);
-          alert('載入抽獎名單失敗，請檢查網頁應用程式 URL 是否正確，或試算表資料格式是否有誤。');
-        }
-      }
-
-      window.onload = () => {
-        loadDataFromGoogleSheet();
-      };
-      // =================================== 載入資料與洗牌函式結束 ===================================
-
-      /**
-       * 播放轉動音效。
-       */
-      function playSpinSound() {
-        if (spinSound) {
-          spinSound.currentTime = 0;
-          spinSound.play().catch(e => console.log("轉動音頻播放失敗:", e));
-        }
-      }
-
-      /**
-       * 停止轉動音效。
-       */
-      function stopSpinSound() {
-        if (spinSound) {
-          spinSound.pause();
-          spinSound.currentTime = 0;
-        }
-      }
-
-      /**
-       * 播放結束音效的特定區段。
-       * @param {number} startTime - 音效開始播放的秒數。
-       * @param {number} duration - 音效持續播放的秒數。
-       */
-      function playFinishSound(startTime, duration) {
-        if (finishSound) {
-          finishSound.currentTime = startTime;
-          finishSound.play().catch(e => console.log("結束音頻播放失敗:", e));
-
-          setTimeout(() => {
-            finishSound.pause();
-            finishSound.currentTime = 0;
-          }, duration * 1000);
-        }
-      }
-
-      /**
-       * 開始抽選流程。
-       */
-      function startDraw() {
-        document.getElementById('drawButton').disabled = true;
-        document.getElementById('result').innerHTML = '';
-        document.getElementById('mainReel').innerText = '--';
-        
-        playSpinSound();
-        spinReel();
-      }
-
-      /**
-       * 轉動主要輪盤。
-       */
-      function spinReel() {
-        let availableResults = [];
-        areaNames.forEach(area => {
-          const numbers = areaMap[area];
-          if (!numbers) return;
-          numbers.forEach(number => {
-            if (!drawnMap[area] || !drawnMap[area].includes(number)) {
-              availableResults.push(`${area} ${number}`);
-            }
-          });
+        pickerContainer.addEventListener('touchstart', (e) => {
+            isDragging = true;
+            const touch = e.touches[0];
+            offset.x = touch.clientX - pickerContainer.getBoundingClientRect().left;
+            offset.y = touch.clientY - pickerContainer.getBoundingClientRect().top;
+            pickerContainer.style.cursor = 'grabbing';
+            e.preventDefault();
         });
 
-        if (availableResults.length === 0) {
-          alert("所有編號都抽完了，請按「重新開始」重新抽選！");
-          document.getElementById('drawButton').disabled = false;
-          stopSpinSound();
-          return;
-        }
+        document.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            const newX = e.clientX - offset.x;
+            const newY = e.clientY - offset.y;
+            pickerContainer.style.left = `${newX}px`;
+            pickerContainer.style.top = `${newY}px`;
+        });
+        
+        document.addEventListener('touchmove', (e) => {
+            if (!isDragging) return;
+            const touch = e.touches[0];
+            const newX = touch.clientX - offset.x;
+            const newY = touch.clientY - offset.y;
+            pickerContainer.style.left = `${newX}px`;
+            pickerContainer.style.top = `${newY}px`;
+            e.preventDefault();
+        });
 
-        const mainReel = document.getElementById('mainReel');
-        let spinDuration = 2000 + Math.random() * 1000;
-        let start = null;
+        document.addEventListener('mouseup', () => {
+            isDragging = false;
+            pickerContainer.style.cursor = 'grab';
+        });
+        
+        document.addEventListener('touchend', () => {
+            isDragging = false;
+            pickerContainer.style.cursor = 'grab';
+        });
 
-        function animate(time) {
-          if (!start) start = time;
-          const progress = time - start;
-          const i = Math.floor(progress / 80) % availableResults.length;
-          mainReel.innerText = availableResults[i];
+        // 隨機選取器邏輯
+        const SPREADSHEET_ID = '1BgOdR7cQzFpKYPim5sxIo3eC2JN5CWOtfg-oYdd_3EQ';
+        const GIDS = {
+            '名單一': '921041441',
+            '名單二': '824754110'
+        };
+        
+        const modalContainer = document.getElementById('modalContainer');
+        const selectList1Btn = document.getElementById('selectList1Btn');
+        const selectList2Btn = document.getElementById('selectList2Btn');
+        
+        const resultBox = document.getElementById('resultBox');
+        const pickBtn = document.getElementById('pickBtn');
+        const messageDiv = document.getElementById('message');
+        const historyList = document.getElementById('historyList');
+        const historyCountSpan = document.getElementById('historyCount');
+        const clearHistoryBtn = document.getElementById('clearHistoryBtn');
+        
+        let currentGid = '';
+        let teamsData = [];
+        let allData = {};
+        let isPicking = false;
+        let drawHistory = [];
 
-          if (progress < spinDuration) {
-            requestAnimationFrame(animate);
-          } else {
-            const finalResult = availableResults[Math.floor(Math.random() * availableResults.length)];
-            
-            mainReel.innerText = finalResult;
-            lastDrawnResult = finalResult;
+        async function fetchTeamsData(gid) {
+            try {
+                if (allData[gid]) {
+                    return allData[gid];
+                }
 
-            const [area, ...numberParts] = finalResult.split(' ');
-            const number = numberParts.join(' ');
-            if (!drawnMap[area]) {
-                drawnMap[area] = [];
+                const TEAMS_SHEET_URL = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/gviz/tq?tqx=out:json&gid=${gid}`;
+                
+                const response = await fetch(TEAMS_SHEET_URL);
+                const text = await response.text();
+                const jsonText = text.substring(text.indexOf('{'), text.lastIndexOf('}') + 1);
+                const data = JSON.parse(jsonText);
+
+                const parsedData = data.table.rows.map(row => {
+                    if (row.c.length > 1 && row.c[1] && row.c[1].v) {
+                        return `${row.c[0].v}: ${row.c[1].v}`;
+                    } else if (row.c[0] && row.c[0].v) {
+                        return row.c[0].v;
+                    }
+                    return null;
+                }).filter(item => item !== null);
+
+                allData[gid] = parsedData;
+                return parsedData;
+
+            } catch (error) {
+                console.error('載入姓名資料失敗:', error);
+                messageDiv.textContent = '載入資料失敗。請檢查您的試算表網址和權限設定。';
+                return [];
             }
-            drawnMap[area].push(number);
-
-            document.getElementById('history').innerHTML += `<div>🔹 <b>${finalResult}</b></div>`;
-            const historyDiv = document.getElementById('history');
-            historyDiv.scrollTop = historyDiv.scrollHeight;
-
-            document.getElementById('drawButton').disabled = false;
-            stopSpinSound();
-            playFinishSound(9, 2);
-          }
         }
-        requestAnimationFrame(animate);
-      }
-      
-      /**
-       * 清除歷史紀錄。
-       */
-      function resetHistory() {
-        document.getElementById('history').innerHTML = '<strong>🎯 抽選紀錄：</strong>';
-      }
 
-      /**
-       * 重置所有抽獎資料，重新開始。
-       */
-      function restartAll() {
-        drawnMap = {};
-        lastDrawnResult = null;
-        document.getElementById('mainReel').innerText = '--';
-        document.getElementById('result').innerHTML = '';
-        document.getElementById('history').innerHTML = '<strong>🎯 抽選紀錄：</strong>';
-        document.getElementById('drawButton').disabled = false;
-        alert("所有資料已重置，重新開始抽選！");
-        stopSpinSound();
-        if (finishSound) {
-          finishSound.pause();
-          finishSound.currentTime = 0;
+        async function updateList() {
+            const fetchedData = await fetchTeamsData(currentGid);
+            teamsData = [...fetchedData];
+            
+            if (teamsData.length > 0) {
+                resultBox.textContent = '準備好了！';
+                pickBtn.disabled = false;
+                if (messageDiv) {
+                    messageDiv.textContent = '';
+                }
+            } else {
+                resultBox.textContent = '載入失敗';
+                pickBtn.disabled = true;
+                if (messageDiv) {
+                    messageDiv.textContent = '試算表中沒有找到可用的姓名資料。';
+                }
+            }
+            drawHistory = [];
+            renderHistory();
         }
-      }
+
+        function renderHistory() {
+            historyList.innerHTML = '';
+            drawHistory.forEach((item, index) => {
+                const li = document.createElement('li');
+                li.className = 'history-item';
+                li.textContent = `${index + 1}. ${item}`;
+                historyList.prepend(li);
+            });
+            historyCountSpan.textContent = `已抽出：${drawHistory.length}人`;
+        }
+
+        function startPicking() {
+            if (isPicking || teamsData.length === 0) {
+                if (teamsData.length === 0 && messageDiv) {
+                    messageDiv.textContent = '名單已抽完，請點擊「清除紀錄」重新開始。';
+                }
+                return;
+            }
+
+            isPicking = true;
+            pickBtn.disabled = true;
+            if (messageDiv) {
+                messageDiv.textContent = '';
+            }
+            
+            let count = 0;
+            const originalData = allData[currentGid];
+            const pickingInterval = setInterval(() => {
+                const randomIndex = Math.floor(Math.random() * originalData.length);
+                const item = originalData[randomIndex];
+                
+                resultBox.textContent = item;
+                
+                count++;
+
+                if (count > 30) {
+                    clearInterval(pickingInterval);
+                    isPicking = false;
+                    const finalIndex = Math.floor(Math.random() * teamsData.length);
+                    const finalItem = teamsData[finalIndex];
+                    
+                    resultBox.textContent = finalItem;
+                    
+                    if (messageDiv) {
+                        messageDiv.textContent = '選取完成！';
+                    }
+                    drawHistory.push(finalItem);
+                    teamsData.splice(finalIndex, 1);
+                    renderHistory();
+                    
+                    if (teamsData.length > 0) {
+                        pickBtn.disabled = false;
+                    } else {
+                        pickBtn.disabled = true;
+                        if (messageDiv) {
+                            messageDiv.textContent = '名單已抽完！請點擊「清除紀錄」重新開始。';
+                        }
+                    }
+                }
+            }, 50);
+        }
+
+        function clearHistory() {
+            drawHistory = [];
+            renderHistory();
+            updateList();
+            if (messageDiv) {
+                messageDiv.textContent = '紀錄已清除，名單已重置。';
+            }
+        }
+
+        pickBtn.addEventListener('click', startPicking);
+        clearHistoryBtn.addEventListener('click', clearHistory);
+
+        // 初始化彈出視窗和名單載入
+        selectList1Btn.addEventListener('click', () => {
+            currentGid = GIDS['名單一'];
+            modalContainer.style.display = 'none';
+            updateList();
+        });
+
+        selectList2Btn.addEventListener('click', () => {
+            currentGid = GIDS['名單二'];
+            modalContainer.style.display = 'none';
+            updateList();
+        });
     </script>
-  </body>
+</body>
 </html>
+
 
